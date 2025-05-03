@@ -1,0 +1,34 @@
+services:
+  client:
+    build: ./client
+    networks:
+      client_net
+
+  controller:
+    build: ./controller
+    networks:
+      controller_net
+
+  onion:
+    build: ./onion
+    networks:
+      onion_net
+
+networks:
+  client_net:
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+          gateway: 10.0.1.1
+
+  onion_net:
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
+          gateway: 10.0.2.1
+
+  controller_net:
+    ipam:
+      config:
+        - subnet: 10.0.3.0/24
+          gateway: 10.0.3.1
