@@ -1,34 +1,67 @@
 services:
-  client:
-    build: ./client
-    networks:
-      client_net
-
   controller:
     build: ./controller
+    ports:
+      - "8000:8000"
     networks:
-      controller_net
+      onion_net:
+        ipv4_address: 10.0.2.254
+      controller_net:
+        ipv4_address: 10.0.3.254
 
+  # Connection between the client and onion networks
+  client:
+    build: ./client
+    depends_on:
+      - controller
+    networks:
+      client_net:
+        ipv4_address: 10.0.1.254
+      onion_net:
+
+  clients:
+    build: ./client
+    depends_on:
+      - client
+    deploy:
+      replicas: 2
+    networks:
+      - client_net
+  
+  # Connection between the onion network and the internet
   onion:
     build: ./onion
+    privileged: true
+    depends_on:
+      - controller
     networks:
-      onion_net
+      onion_net:
+        ipv4_address: 10.0.2.253
+      controller_net:
+      
+  onions:
+    build: ./onion
+    privileged: true
+    depends_on:
+      - onion
+    deploy:
+      replicas: 3
+    networks:
+      - onion_net
+      - controller_net
 
 networks:
   client_net:
     ipam:
       config:
         - subnet: 10.0.1.0/24
-          gateway: 10.0.1.1
 
   onion_net:
     ipam:
       config:
         - subnet: 10.0.2.0/24
-          gateway: 10.0.2.1
 
   controller_net:
     ipam:
       config:
         - subnet: 10.0.3.0/24
-          gateway: 10.0.3.1
