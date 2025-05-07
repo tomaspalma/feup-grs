@@ -2,6 +2,8 @@
 
 /usr/share/openvswitch/scripts/ovs-ctl start
 
+ovs-vswitchd
+
 # Create OVS bridge
 ovs-vsctl add-br br0
 
