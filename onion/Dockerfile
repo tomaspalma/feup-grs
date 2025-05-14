@@ -1,11 +1,7 @@
 FROM ubuntu:22.04
 
 RUN apt update && apt install -y \
-    openvswitch-switch \
-    iproute2
+    iproute2 \
+    curl
 
-COPY entrypoint.sh /entrypoint.sh
-
-RUN chmod +x /entrypoint.sh
-
-CMD /entrypoint.sh
+CMD tail -f /dev/null
