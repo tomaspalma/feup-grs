@@ -3,8 +3,10 @@ FROM ubuntu:20.04
 RUN apt-get update && \
     apt-get install -y python3 python3-pip && \
     pip install --upgrade pip && \
-    pip install flask
+    pip install flask psycopg2-binary python-dotenv flask_sqlalchemy
 
-COPY server.py /controller/server.py
+WORKDIR /controller
 
-CMD python3 /controller/server.py
+COPY server.py .
+
+CMD python3 server.py

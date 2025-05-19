@@ -6,6 +6,8 @@ services:
     networks:
       onion_net:
         ipv4_address: 10.0.2.254
+    volumes:
+      - ./controller:/controller
     
   prometheus:
     image: prom/prometheus
@@ -31,7 +33,29 @@ services:
     networks:
       onion_net:
         ipv4_address: 10.0.2.252
+  
+  postgres:
+    image: postgres:17
+    container_name: grs-postgres
+    ports:
+      - "5432:5432"
+    env_file:
+      - database/.env
+    volumes:
+      - grs_postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d
+    networks:
+      onion_net:
 
+  pgadmin:
+    build: ./pgadmin
+    container_name: grs-pgadmin
+    env_file:
+      - pgadmin/.env
+    ports:
+      - "8080:80"
+    networks:
+      onion_net:
 
   # Connection between the client and onion networks
   client:
@@ -52,25 +76,17 @@ services:
     networks:
       - client_net
   
-  # Connection between the onion network and the internet
-  onion:
-    build: ./onion
-    privileged: true
-    depends_on:
-      - controller
-    networks:
-      onion_net:
-        ipv4_address: 10.0.2.251
-      
   onions:
     build: ./onion
     privileged: true
     depends_on:
-      - onion
+      - controller
     deploy:
       replicas: 3
     networks:
       - onion_net
+    volumes:
+      - ./onion:/onion
 
 networks:
   client_net:
@@ -85,4 +101,8 @@ networks:
 
 volumes:
   grafana-data:
+    driver: local
+
+  grs_postgres_data:
+    name: grs_postgres_data
     driver: local
