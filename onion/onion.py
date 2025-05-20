@@ -4,6 +4,7 @@ from cryptography.hazmat.primitives import serialization
 
 import requests
 import os
+import socket
 
 load_dotenv()
 
@@ -36,14 +37,12 @@ def generate_keypair():
 
 # 1. Make request to controller
 while True:
-    print("ADDRESS: ", os.getenv('ADDRESS'))
-    print("ID: ", os.getenv('REPLICA_NAME'))
-
     try: 
         res = requests.post(f"{os.getenv('CONTROLLER_URL')}/identities", json={
             'id': os.getenv('REPLICA_NAME'),
             'public_key': public_pem.decode('utf-8'),
-            'address': os.getenv('ADDRESS')
+            'address': os.getenv('ADDRESS'),
+            'port': os.getenv('PORT')
         })
 
         if res.ok:
@@ -53,3 +52,14 @@ while True:
         print("Error: ", e)
 
 # 2. Listen for requests
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind((os.getenv('HOST'), int(os.getenv('PORT'))))
+    s.listen()
+    conn, addr = s.accept()
+    with conn:
+        print(f"Connected by {addr}")
+        while True:
+            data = conn.recv(1024)
+            if not data:
+                break
+            conn.sendall(data)

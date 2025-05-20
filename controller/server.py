@@ -22,6 +22,7 @@ class Identity(db.Model):
     name = db.Column(db.String(255), nullable=False)
     public_key = db.Column(db.String(255), nullable=False)
     address = db.Column(db.String(255), nullable=False)
+    port = db.Column(db.String(255), nullable=False)
     last_updated = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 @app.route('/')
@@ -35,15 +36,13 @@ def identities():
     id = json['id']
     public_key = json['public_key']
     address = json['address']
-
-    print("ID: ", id)
-    print("PUBLIC_KEY: ", public_key)
-    print("ADDRESS: ", address)
+    port = json['port']
 
     existing_identity = Identity.query.filter_by(name=id).first()
     if existing_identity:
         existing_identity.public_key = public_key
         existing_identity.address = address
+        existing_identity.port = port
         existing_identity.last_updated = datetime.utcnow()
 
         db.session.commit()
@@ -52,6 +51,7 @@ def identities():
             name=id,
             public_key=public_key,
             address=address,
+            port=port,
             last_updated=datetime.utcnow()
         )
 
@@ -66,8 +66,6 @@ def circuit():
 
     # get identities from database
     identities = Identity.query.all()
-
-    print("IDENTITIES: ", identities)
 
     # 1. Select nodes
     selected_nodes = []

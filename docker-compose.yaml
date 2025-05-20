@@ -88,6 +88,10 @@ services:
     depends_on:
       - controller
       - postgres
+    environment:
+      - HOST=0.0.0.0
+      - PORT=9000
+      - CONTROLLER_URL=http://controller:8000
     deploy:
       replicas: 3
     networks:
