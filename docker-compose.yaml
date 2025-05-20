@@ -3,6 +3,8 @@ services:
     build: ./controller
     ports:
       - "8000:8000"
+    depends_on:
+      - postgres
     networks:
       onion_net:
         ipv4_address: 10.0.2.254
@@ -52,6 +54,8 @@ services:
     container_name: grs-pgadmin
     env_file:
       - pgadmin/.env
+    depends_on:
+      - postgres
     ports:
       - "8080:80"
     networks:
@@ -66,6 +70,8 @@ services:
       client_net:
         ipv4_address: 10.0.1.254
       onion_net:
+    volumes:
+      - ./client:/client
 
   clients:
     build: ./client
@@ -81,6 +87,7 @@ services:
     privileged: true
     depends_on:
       - controller
+      - postgres
     deploy:
       replicas: 3
     networks:

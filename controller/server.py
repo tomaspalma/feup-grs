@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from datetime import datetime
 
+import random
 import os
 
 load_dotenv()
@@ -58,6 +59,32 @@ def identities():
         db.session.commit()
 
     return json
+
+@app.route("/circuit", methods=['POST'])
+def circuit():
+    #json = request.get_json()
+
+    # get identities from database
+    identities = Identity.query.all()
+
+    print("IDENTITIES: ", identities)
+
+    # 1. Select nodes
+    selected_nodes = []
+    alive_nodes = 0
+
+    while alive_nodes < 3:
+        selected_nodes.append(random.choice(identities))
+
+        alive_nodes += 1
+
+    # 2. Send circuit information to nodes
+
+    # 3. Return circuit entry to client
+    return {
+        "entry": selected_nodes[0].address,
+        "keys": list(map(lambda x: x.public_key , selected_nodes))
+    }
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True) 
