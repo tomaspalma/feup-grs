@@ -5,6 +5,7 @@ from datetime import datetime
 
 import random
 import os
+import socket
 
 load_dotenv()
 
@@ -77,6 +78,28 @@ def circuit():
         alive_nodes += 1
 
     # 2. Send circuit information to nodes
+    for i in range(len(selected_nodes)):
+        node = selected_nodes[i]
+
+        while True:
+            try: 
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((node.address, int(node.port)))
+                break
+            except Exception as e:
+                print("Error: ", e)
+                continue
+
+        keys = ""
+        for key in selected_nodes[i+1:]:
+            keys += f",{key.public_key}"
+
+        right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1].public_key
+        left = "None" if i == 0 else selected_nodes[i-1].public_key
+
+        message = f"{keys},{left},{right}".encode()
+        sock.sendall(message)
+
 
     # 3. Return circuit entry to client
     return {

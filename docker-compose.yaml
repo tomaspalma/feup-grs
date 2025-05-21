@@ -86,8 +86,8 @@ services:
     build: ./onion
     privileged: true
     depends_on:
-      - controller
       - postgres
+      - controller
     environment:
       - HOST=0.0.0.0
       - PORT=9000
