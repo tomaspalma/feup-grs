@@ -90,14 +90,10 @@ def circuit():
                 print("Error: ", e)
                 continue
 
-        keys = ""
-        for key in selected_nodes[i+1:]:
-            keys += f",{key.public_key}"
-
         right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1].public_key
         left = "None" if i == 0 else selected_nodes[i-1].public_key
 
-        message = f"{keys},{left},{right}".encode()
+        message = f"{left},{right}".encode()
         sock.sendall(message)
 
 

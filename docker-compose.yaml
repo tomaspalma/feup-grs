@@ -97,7 +97,7 @@ services:
     networks:
       - onion_net
     volumes:
-      - ./onion:/onion
+      - ./onion/onion.py:/onion/onion.py
 
 networks:
   client_net:
