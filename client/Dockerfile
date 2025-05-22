@@ -8,3 +8,5 @@ RUN pip3 install --upgrade pip && \
 WORKDIR /client
 
 COPY . .
+
+CMD tail -f /dev/null
