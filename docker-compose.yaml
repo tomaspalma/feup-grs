@@ -1,6 +1,7 @@
 services:
   controller:
     build: ./controller
+    container_name: grs-controller
     ports:
       - "8000:8000"
     depends_on:
@@ -80,7 +81,10 @@ services:
     deploy:
       replicas: 2
     networks:
-      - client_net
+      client_net:
+      onion_net:
+    volumes:
+      - ./client:/client
   
   onions:
     build: ./onion
@@ -89,7 +93,7 @@ services:
       - postgres
       - controller
     environment:
-      - HOST=0.0.0.0
+      - HOST=127.0.0.1
       - PORT=9000
       - CONTROLLER_URL=http://controller:8000
     deploy:
