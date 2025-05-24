@@ -1,7 +1,7 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 
 import random
 import os
@@ -17,49 +17,42 @@ db = SQLAlchemy(app)
 
 class Identity(db.Model):
     __tablename__ = 'identities'
-    __table_args__ = {'schema': 'onion_controller'} 
+    __table_args__ = (
+        db.PrimaryKeyConstraint('address', 'port'),
+        {'schema': 'onion_controller'}
+    )
 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False)
-    public_key = db.Column(db.String(255), nullable=False)
-    address = db.Column(db.String(255), nullable=False)
-    port = db.Column(db.String(255), nullable=False)
-    last_updated = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-
-@app.route('/')
-def index():
-    return "Hello, World!"
+    address = db.Column(db.Text, nullable=False)
+    port = db.Column(db.Text, nullable=False)
+    public_key = db.Column(db.Text, nullable=False)
+    last_updated = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
 
 @app.route('/identities', methods=['POST'])
 def identities():
     json = request.get_json()
 
-    id = json['id']
-    public_key = json['public_key']
     address = json['address']
     port = json['port']
+    public_key = json['public_key']
 
-    existing_identity = Identity.query.filter_by(name=id).first()
+    existing_identity = Identity.query.filter_by(address=address, port=port).first()
     if existing_identity:
         existing_identity.public_key = public_key
-        existing_identity.address = address
-        existing_identity.port = port
-        existing_identity.last_updated = datetime.utcnow()
+        existing_identity.last_updated = datetime.now(timezone.utc)
 
         db.session.commit()
     else:
         identity = Identity(
-            name=id,
-            public_key=public_key,
             address=address,
             port=port,
-            last_updated=datetime.utcnow()
+            public_key=public_key,
+            last_updated=datetime.now(timezone.utc)
         )
 
         db.session.add(identity)
         db.session.commit()
 
-    return json
+    return {"status": "ok"}
 
 def is_node_alive(node):
     try: 
@@ -71,49 +64,45 @@ def is_node_alive(node):
 
 @app.route("/circuit", methods=['POST'])
 def circuit():
-    print("SADGE")
-    try:
-        #json = request.get_json()
+    identities = Identity.query.all()
 
-        # get identities from database
-        identities = Identity.query.all()
+    # 1. Select nodes
+    selected_nodes = []
+    alive_nodes = 0
 
-        # 1. Select nodes
-        selected_nodes = []
-        alive_nodes = 0
+    while alive_nodes < 3:
+        candidate = random.choice(identities)
 
-        print("BEFORE ALIVE NODES", flush=True)
+        (is_alive, sock) = is_node_alive(candidate)
+        if is_alive:
+            selected_nodes.append((candidate, sock))
+            identities.remove(candidate)
+            alive_nodes += 1
+        else:
+            db.session.delete(candidate)
+            db.session.commit()
 
-        while alive_nodes < 3:
-            candidate = random.choice(identities)
+    # 2. Send circuit information to nodes
+    for i in range(len(selected_nodes)):
+        sock = selected_nodes[i][1]
 
-            print("BEFORE IS NODE ALIVE")
-            (is_alive, sock) = is_node_alive(candidate)
-            print("AFTER IS NODE ALIVE", flush=True)
-            if is_alive:
-                selected_nodes.append((candidate, sock))
-                alive_nodes += 1
-
-        # 2. Send circuit information to nodes
-        for i in range(len(selected_nodes)):
-            (node, sock) = selected_nodes[i]
-
-            right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1][0].public_key
-            left = "None" if i == 0 else selected_nodes[i-1][0].public_key
-        
-            message = f"{left},{right}".encode()
-            sock.sendall(message)
-            print("Message sent: ", message, flush=True)
-            break
+        right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1][0].public_key
+        left = "None" if i == 0 else selected_nodes[i-1][0].public_key
     
-        # 3. Return circuit entry to client
-        return {
-            "circuit": list(map(lambda x: { "address": x[0].address, "port": x[0].port }, selected_nodes)),
-            "keys": list(map(lambda x: x[0].public_key , selected_nodes))
-        }
+        message = f"{left},{right}".encode()
+        try:
+            sock.sendall(message)
+        except Exception as e:
+            print("Error sending message: ", e, flush=True)
+            continue
+    
+        print("Message sent: ", message, flush=True)
 
-    except Exception as e:
-        print("Error: ", e, flush=True)
+    # 3. Return circuit entry to client
+    return {
+        "circuit": list(map(lambda x: { "address": x[0].address, "port": x[0].port }, selected_nodes)),
+        "keys": list(map(lambda x: x[0].public_key , selected_nodes))
+    }
 
 
 if __name__ == '__main__':

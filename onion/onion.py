@@ -6,8 +6,6 @@ import requests
 import os
 import socket
 
-print("STARTING__", flush=True)
-
 load_dotenv()
 
 def generate_keypair():
@@ -31,20 +29,15 @@ def generate_keypair():
 (public_pem, private_pem) = generate_keypair()
 
 # 1. Make request to controller
-while True:
-    try: 
-        res = requests.post(f"{os.getenv('CONTROLLER_URL')}/identities", json={
-            'id': os.getenv('REPLICA_NAME'),
-            'public_key': public_pem.decode('utf-8'),
-            'address': os.getenv('ADDRESS'),
-            'port': os.getenv('PORT')
-        })
+try: 
+    res = requests.post(f"{os.getenv('CONTROLLER_URL')}/identities", json={
+        'address': os.getenv('ADDRESS'),
+        'port': os.getenv('PORT'),
+        'public_key': public_pem.decode('utf-8'),
+    })
 
-        if res.ok:
-            print("Response OK")
-            break
-    except Exception as e:
-        print("Error: ", e)
+except Exception as e:
+    print("Error: ", e)
 
 # 2. Listen for requests
 try:
