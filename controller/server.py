@@ -61,47 +61,60 @@ def identities():
 
     return json
 
+def is_node_alive(node):
+    try: 
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((node.address, int(node.port)))
+        return (True, sock)
+    except:
+        return (False, None)
+
 @app.route("/circuit", methods=['POST'])
 def circuit():
-    #json = request.get_json()
+    print("SADGE")
+    try:
+        #json = request.get_json()
 
-    # get identities from database
-    identities = Identity.query.all()
+        # get identities from database
+        identities = Identity.query.all()
 
-    # 1. Select nodes
-    selected_nodes = []
-    alive_nodes = 0
+        # 1. Select nodes
+        selected_nodes = []
+        alive_nodes = 0
 
-    while alive_nodes < 3:
-        selected_nodes.append(random.choice(identities))
+        print("BEFORE ALIVE NODES", flush=True)
 
-        alive_nodes += 1
+        while alive_nodes < 3:
+            candidate = random.choice(identities)
 
-    # 2. Send circuit information to nodes
-    for i in range(len(selected_nodes)):
-        node = selected_nodes[i]
+            print("BEFORE IS NODE ALIVE")
+            (is_alive, sock) = is_node_alive(candidate)
+            print("AFTER IS NODE ALIVE", flush=True)
+            if is_alive:
+                selected_nodes.append((candidate, sock))
+                alive_nodes += 1
 
-        while True:
-            try: 
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.connect((node.address, int(node.port)))
-                break
-            except Exception as e:
-                print("Error: ", e)
-                continue
+        # 2. Send circuit information to nodes
+        for i in range(len(selected_nodes)):
+            (node, sock) = selected_nodes[i]
 
-        right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1].public_key
-        left = "None" if i == 0 else selected_nodes[i-1].public_key
+            right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1][0].public_key
+            left = "None" if i == 0 else selected_nodes[i-1][0].public_key
+        
+            message = f"{left},{right}".encode()
+            sock.sendall(message)
+            print("Message sent: ", message, flush=True)
+            break
+    
+        # 3. Return circuit entry to client
+        return {
+            "circuit": list(map(lambda x: { "address": x[0].address, "port": x[0].port }, selected_nodes)),
+            "keys": list(map(lambda x: x[0].public_key , selected_nodes))
+        }
 
-        message = f"{left},{right}".encode()
-        sock.sendall(message)
+    except Exception as e:
+        print("Error: ", e, flush=True)
 
-
-    # 3. Return circuit entry to client
-    return {
-        "entry": selected_nodes[0].address,
-        "keys": list(map(lambda x: x.public_key , selected_nodes))
-    }
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True) 

@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 RUN apt update && apt install -y \
-    iproute2 iputils-ping curl wget python3 python3-pip
+    iproute2 iputils-ping curl wget python3 python3-pip net-tools ufw
 
 # Install node_exporter for monitoring
 RUN wget https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz && \
@@ -11,6 +11,8 @@ RUN wget https://github.com/prometheus/node_exporter/releases/download/v1.9.1/no
 
 RUN pip3 install --upgrade pip && \
     pip3 install requests python-dotenv cryptography
+
+EXPOSE 9000
 
 WORKDIR /onion
 

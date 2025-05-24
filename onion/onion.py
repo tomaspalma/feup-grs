@@ -1,31 +1,26 @@
 from dotenv import load_dotenv
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 
 import requests
 import os
 import socket
 
+print("STARTING__", flush=True)
+
 load_dotenv()
 
 def generate_keypair():
-    # Generate private key
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048  # You can use 4096 for stronger security
-    )
+    private_key = ec.generate_private_key(ec.SECP256R1())
 
-    # Get public key from private key
-    public_key = private_key.public_key()
-
-    # Serialize private key
     private_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()  # Use a password-based algorithm for more security
+        encryption_algorithm=serialization.NoEncryption()
     )
 
-    # Serialize public key
+    public_key = private_key.public_key()
+
     public_pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
@@ -52,14 +47,22 @@ while True:
         print("Error: ", e)
 
 # 2. Listen for requests
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.bind((os.getenv('HOST'), int(os.getenv('PORT'))))
-    s.listen()
-    conn, addr = s.accept()
-    with conn:
-        print(f"Connected by {addr}")
+try:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        print("HOST: ", os.getenv('HOST'))
+        print("PORT: ", os.getenv('PORT'))
+        s.bind((os.getenv('HOST'), int(os.getenv('PORT'))))
+        s.listen()
+        print("LISTENING: ", flush=True)
         while True:
-            data = conn.recv(1024)
-            if not data:
-                break
-            conn.sendall(data)
+            conn, addr = s.accept()
+            print("After accept")
+            with conn:
+                print(f"Connected by {addr}")
+                while True:
+                    data = conn.recv(1024)
+                    if not data:
+                        break
+
+except Exception as e:
+    print("Error: ", e, flush=True)

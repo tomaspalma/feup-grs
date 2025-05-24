@@ -93,9 +93,9 @@ services:
       - postgres
       - controller
     environment:
-      - HOST=127.0.0.1
+      - HOST=0.0.0.0
       - PORT=9000
-      - CONTROLLER_URL=http://controller:8000
+      - CONTROLLER_URL=http://grs-controller:8000
     deploy:
       replicas: 3
     networks:
