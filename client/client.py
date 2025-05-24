@@ -63,8 +63,6 @@ def main():
     # 1. Get circuit entry
     res = requests.post(f"{os.getenv('CONTROLLER_URL')}/circuit")
 
-    print("MEU: ", flush=True)
-
     msg = args.url.encode()
     json = res.json()
     for key in json['keys']:
@@ -80,8 +78,6 @@ def main():
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PublicFormat.SubjectPublicKeyInfo
                 )
-
-                print("ADDRESS: "   , node["address"])
 
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.connect((node["address"], int(node["port"])))

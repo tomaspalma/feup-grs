@@ -70,7 +70,7 @@ def circuit():
     selected_nodes = []
     alive_nodes = 0
 
-    while alive_nodes < 3:
+    while alive_nodes < 3 and len(identities) > 0:
         candidate = random.choice(identities)
 
         (is_alive, sock) = is_node_alive(candidate)

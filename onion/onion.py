@@ -29,29 +29,29 @@ def generate_keypair():
 (public_pem, private_pem) = generate_keypair()
 
 # 1. Make request to controller
-try: 
-    res = requests.post(f"{os.getenv('CONTROLLER_URL')}/identities", json={
-        'address': os.getenv('ADDRESS'),
-        'port': os.getenv('PORT'),
-        'public_key': public_pem.decode('utf-8'),
-    })
+while True:
+    try: 
+        res = requests.post(f"{os.getenv('CONTROLLER_URL')}/identities", json={
+            'address': os.getenv('ADDRESS'),
+            'port': os.getenv('PORT'),
+            'public_key': public_pem.decode('utf-8'),
+        })
 
-except Exception as e:
-    print("Error: ", e)
+        if res.ok:
+            print("Identity registered successfully.")
+            break
+
+    except Exception as e:
+        print("Error: ", e)
 
 # 2. Listen for requests
 try:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        print("HOST: ", os.getenv('HOST'))
-        print("PORT: ", os.getenv('PORT'))
         s.bind((os.getenv('HOST'), int(os.getenv('PORT'))))
         s.listen()
-        print("LISTENING: ", flush=True)
         while True:
             conn, addr = s.accept()
-            print("After accept")
             with conn:
-                print(f"Connected by {addr}")
                 while True:
                     data = conn.recv(1024)
                     if not data:
