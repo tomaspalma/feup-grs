@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import random
 import os
 import socket
+import requests
 
 load_dotenv()
 
@@ -54,35 +55,35 @@ def identities():
 
     return {"status": "ok"}
 
-def is_node_alive(node):
-    try: 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((node.address, int(node.port)))
-        return (True, sock)
-    except:
-        return (False, None)
-
 @app.route("/circuit", methods=['POST'])
 def circuit():
     identities = Identity.query.all()
 
-    # 1. Select nodes
+    # Filter out nodes that are not alive
+    up_nodes = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'up'}).json()
+    up_nodes = [node['metric']['instance'].split(':')[0] for node in up_nodes['data']['result'] if node['value'][1] == '1']
+    identities = list(filter(lambda x: x.address in up_nodes, identities))
+
+    # Sort nodes by network traffic
+    metric = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'node_network_receive_bytes_total[1m]'}).json()
+    metric = {node['metric']['instance'].split(':')[0]: float(node['values'][0][1]) for node in metric['data']['result']}
+    identities.sort(key=lambda x: metric.get(x.address, 0))
+
     selected_nodes = []
-    alive_nodes = 0
-
-    while alive_nodes < 3 and len(identities) > 0:
+    while len(selected_nodes) < 3 and len(identities) > 0:
         candidate = random.choice(identities)
+        identities.remove(candidate)
 
-        (is_alive, sock) = is_node_alive(candidate)
-        if is_alive:
-            selected_nodes.append((candidate, sock))
-            identities.remove(candidate)
-            alive_nodes += 1
-        else:
-            db.session.delete(candidate)
-            db.session.commit()
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((candidate.address, int(candidate.port)))
+        except Exception as e:
+            print(f"Error connecting to {candidate.address}:{candidate.port} - {e}", flush=True)
+            continue
+        
+        selected_nodes.append((candidate, sock))
 
-    # 2. Send circuit information to nodes
+    # Send circuit information to nodes
     for i in range(len(selected_nodes)):
         sock = selected_nodes[i][1]
 
@@ -98,7 +99,7 @@ def circuit():
     
         print("Message sent: ", message, flush=True)
 
-    # 3. Return circuit entry to client
+    # Return circuit to client
     return {
         "circuit": list(map(lambda x: { "address": x[0].address, "port": x[0].port }, selected_nodes)),
         "keys": list(map(lambda x: x[0].public_key , selected_nodes))

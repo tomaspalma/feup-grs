@@ -68,8 +68,6 @@ def main():
     for key in json['keys']:
         msg = encrypt_layer(msg, key)
 
-    print("CIRCUIT: ", json['circuit'], flush=True)
-
     # 2. Send client public key
     for node in json['circuit']:
         while True:
