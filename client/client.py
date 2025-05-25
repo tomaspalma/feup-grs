@@ -86,26 +86,15 @@ def main():
 
         msg = f"data,{json['id']},{base64.b64encode(url).decode()},END" 
         sock.sendall(msg.encode())
-    except Exception as e:
-        print("Error sending data: ", e, flush=True)
-        return
-    finally:
-        sock.close()
-    
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(('0.0.0.0', 9000))
-        sock.listen()
 
-        conn, _ = sock.accept()
-
+        # Wait for the response on the same socket
         data = b""
         while b",END" not in data:
-            chunk = conn.recv(1024)
+            chunk = sock.recv(1024)
             if not chunk:
                 break
             data += chunk
-        
+
         message = data.decode()
         message = message.split(",")[2].encode()
         message = base64.b64decode(message)
@@ -116,7 +105,8 @@ def main():
         print("Response: ", message, flush=True)
 
     except Exception as e:
-        print("Error: ", e, flush=True)
+        print("Error sending data or receiving response: ", e, flush=True)
+        return
     finally:
         sock.close()
 

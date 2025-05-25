@@ -68,54 +68,62 @@ def handle_client_pkey(circuit_id, public_key):
     else:
         print("No circuit found for ", circuit_id, flush=True)
 
-def handle_data(circuit_id, data):
+def handle_data(circuit_id, data, conn):
     if circuits.get(circuit_id):
         data = base64.b64decode(data)
-
         key = circuits[circuit_id]["secret"]
 
         # 1. Decrypt data
         cipher = Cipher(algorithms.AES(key), modes.CTR(b"\x8f\x07@nq}F\x1e\x1cv\x95\x13,\xb3\xef\xe9"), backend=default_backend())
         decryptor = cipher.decryptor()
-
         data = decryptor.update(data) + decryptor.finalize()
 
-        # 2. Send it to the next node
+        # 2. Send it to the next node or handle locally
         if circuits[circuit_id]["right"] != "None":
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.connect((circuits[circuit_id]["right"], 9000))
                 sock.sendall(f"data,{circuit_id},{base64.b64encode(data).decode()},END".encode())
+                
+                buffer = b""
+                while b",END" not in buffer:
+                    chunk = sock.recv(1024)
+                    if not chunk:
+                        break
+                    buffer += chunk
+                
+                msg, _ = buffer.split(b",END", 1)
+                msg = msg.decode()
+                _, _, data = msg.split(",", 2)
+                handle_response(circuit_id, data, conn)
+
             except Exception as e:
                 print(f"Error forwarding data to next node: {e}", flush=True)
             finally:
                 sock.close()
         else:
-            res = requests.get(data)
+            try:
+                res = requests.get(data)
+                
+                handle_response(circuit_id, base64.b64encode(res.content).decode(), conn)
+            except Exception as e:
+                print(f"Error making final request: {e}", flush=True)
 
-            handle_response(circuit_id, base64.b64encode(res.content).decode())
-
-def handle_response(circuit_id, data):
+def handle_response(circuit_id, data, conn):
     if circuits.get(circuit_id):
         data = base64.b64decode(data)
-
         key = circuits[circuit_id]["secret"]
 
         # 1. Encrypt data
         cipher = Cipher(algorithms.AES(key), modes.CTR(b"\x8f\x07@nq}F\x1e\x1cv\x95\x13,\xb3\xef\xe9"), backend=default_backend())
         encryptor = cipher.encryptor()
-
         data = encryptor.update(data) + encryptor.finalize()
 
-        # 2. Send it to the previous node
+        # 2. Send it to the previous node using the same socket if possible
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((circuits[circuit_id]["left"], 9000))
-            sock.sendall(f"rdata,{circuit_id},{base64.b64encode(data).decode()},END".encode())
+            conn.sendall(f"data,{circuit_id},{base64.b64encode(data).decode()},END".encode())
         except Exception as e:
             print(f"Error sending response to previous node: {e}", flush=True)
-        finally:
-            sock.close()
 
 # 1. Make request to controller
 while True:
@@ -149,24 +157,16 @@ def handle_connection(conn):
                 if msg.startswith("client_pkey"):
                     circuit_id = msg.split(",")[1]
                     public_key = msg.split(",")[2]
-
                     handle_client_pkey(circuit_id, public_key)
                 elif msg.startswith("controller_setup"):
                     circuit_id = msg.split(",")[1]
                     left = msg.split(",")[2]
                     right = msg.split(",")[3]
-
                     handle_new_circuit(circuit_id, left, right)
                 elif msg.startswith("data"):
                     circuit_id = msg.split(",")[1]
                     data = msg.split(",")[2]
-
-                    handle_data(circuit_id, data)
-                elif msg.startswith("rdata"):
-                    circuit_id = msg.split(",")[1]
-                    data = msg.split(",")[2]
-
-                    handle_response(circuit_id, data)
+                    handle_data(circuit_id, data, conn)
 
 # 2. Listen for requests
 try:
