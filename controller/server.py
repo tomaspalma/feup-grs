@@ -8,13 +8,15 @@ import os
 import socket
 import requests
 import uuid
+import time
 
 load_dotenv()
 
 app = Flask(__name__)
+flask_startup_time = time.time()
+warming_up = True
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-
 db = SQLAlchemy(app)
 
 class Identity(db.Model):
@@ -58,21 +60,29 @@ def identities():
 
 @app.route("/circuit", methods=['POST'])
 def circuit():
+    global warming_up
     identities = Identity.query.all()
 
-    # Filter out nodes that are not alive
-    up_nodes = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'up'}).json()
-    up_nodes = [node['metric']['instance'].split(':')[0] for node in up_nodes['data']['result'] if node['value'][1] == '1']
-    identities = list(filter(lambda x: x.address in up_nodes, identities))
+    if warming_up and time.time() - flask_startup_time > 60:
+        warming_up = False            
 
-    # Sort nodes by network traffic
-    metric = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'node_network_receive_bytes_total[1m]'}).json()
-    metric = {node['metric']['instance'].split(':')[0]: float(node['values'][0][1]) for node in metric['data']['result']}
-    identities.sort(key=lambda x: metric.get(x.address, 0))
+    if not warming_up: # Prometheus takes a while to start up, can only use its metrics after 60 seconds
+        # Filter out nodes that are not alive
+        up_nodes = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'up'}).json()
+        up_nodes = [node['metric']['instance'].split(':')[0] for node in up_nodes['data']['result'] if node['value'][1] == '1']
+        identities = list(filter(lambda x: x.address in up_nodes, identities))
+
+        # Sort nodes by network traffic
+        metric = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'node_network_receive_bytes_total[1m]'}).json()
+        metric = {node['metric']['instance'].split(':')[0]: float(node['values'][0][1]) for node in metric['data']['result']}
+        identities.sort(key=lambda x: metric.get(x.address, 0))
 
     selected_nodes = []
     while len(selected_nodes) < 3 and len(identities) > 0:
-        candidate = random.choice(identities)
+        if warming_up:
+            candidate = random.choice(identities)
+        else:
+            candidate = identities[0]
         identities.remove(candidate)
 
         try:
