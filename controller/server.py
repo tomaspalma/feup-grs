@@ -7,6 +7,7 @@ import random
 import os
 import socket
 import requests
+import uuid
 
 load_dotenv()
 
@@ -83,15 +84,17 @@ def circuit():
         
         selected_nodes.append((candidate, sock))
 
+    circuit_id = str(uuid.uuid4())
     # Send circuit information to nodes
     for i in range(len(selected_nodes)):
         sock = selected_nodes[i][1]
 
-        right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1][0].public_key
-        left = "None" if i == 0 else selected_nodes[i-1][0].public_key
+        right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1][0].address
+        left = "None" if i == 0 else selected_nodes[i-1][0].address
     
-        message = f"{left},{right}".encode()
+        message = f"controller_setup,{circuit_id},{left},{right},END".encode()
         try:
+            print("SENDING: ", message, flush=True)
             sock.sendall(message)
         except Exception as e:
             print("Error sending message: ", e, flush=True)
@@ -101,6 +104,7 @@ def circuit():
 
     # Return circuit to client
     return {
+        "id": circuit_id,
         "circuit": list(map(lambda x: { "address": x[0].address, "port": x[0].port }, selected_nodes)),
         "keys": list(map(lambda x: x[0].public_key , selected_nodes))
     }

@@ -20,35 +20,31 @@ import os
 
 load_dotenv()
 
+client_private_key = ec.generate_private_key(ec.SECP256R1())
+client_public_key = client_private_key.public_key()
+
 def encrypt_layer(msg: bytes, key):
-    encoded_key = load_pem_public_key(key.encode('utf-8'))
+    print("KEY: ", key, flush=True)
+    onion_encoded_key = load_pem_public_key(key.encode('utf-8'))
 
-    ephemeral_private = ec.generate_private_key(encoded_key.curve)
-    ephemeral_public = ephemeral_private.public_key()
+    shared_secret = client_private_key.exchange(ec.ECDH(), onion_encoded_key)
 
-    shared_secret = ephemeral_private.exchange(ec.ECDH(), encoded_key)
+    print("CLIENT SHARED SECRET: ", shared_secret, flush=True)
 
     # Derive AES key using HKDF
     aes_key = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=b'layered_encryption',
+        info=b""
     ).derive(shared_secret)
 
-    # Encrypt payload with AES
-    iv = os.urandom(16)
-    cipher = Cipher(algorithms.AES(aes_key), modes.CTR(iv))
-    encryptor = cipher.encryptor()
-    ciphertext = encryptor.update(msg) + encryptor.finalize()
-    
-    # Pack data: ephemeral public key + IV + ciphertext
-    ephemeral_public_bytes = ephemeral_public.public_bytes(
-        encoding=serialization.Encoding.DER,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
+    print("CLIENT AES KEY: ", aes_key, flush=True)
 
-    return ephemeral_public_bytes + iv + ciphertext
+    cipher = Cipher(algorithms.AES(aes_key), modes.CTR(b"\x8f\x07@nq}F\x1e\x1cv\x95\x13,\xb3\xef\xe9"), backend=default_backend())
+    encryptor = cipher.encryptor()
+
+    return encryptor.update(msg) + encryptor.finalize()
     
 def main():
     parser = argparse.ArgumentParser(description="GRS Onion Client")
@@ -57,20 +53,19 @@ def main():
 
     args = parser.parse_args()
 
-    client_private_key = ec.generate_private_key(ec.SECP256R1())
-    client_public_key = client_private_key.public_key()
-
     # 1. Get circuit entry
     res = requests.post(f"{os.getenv('CONTROLLER_URL')}/circuit")
 
-    msg = args.url.encode()
+    url = args.url.encode()
     json = res.json()
     for key in json['keys']:
-        msg = encrypt_layer(msg, key)
+        url = encrypt_layer(url, key)
 
+    print("CIRCUIT: ", json["circuit"], flush=True)
     # 2. Send client public key
-    for node in json['circuit']:
+    for i, node in enumerate(json['circuit']):
         while True:
+            print("Sending to ", node, flush=True)
             try: 
                 public_pem = client_public_key.public_bytes(
                     encoding=serialization.Encoding.PEM,
@@ -79,15 +74,20 @@ def main():
 
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.connect((node["address"], int(node["port"])))
-                
-                # Send the message
-                sock.sendall(public_pem)
+
+                msg = f"client_pkey,{json['id']},{public_pem.decode()},END" 
+                sock.sendall(msg.encode())
 
                 break
             except Exception as e:
                 print("Error: ", e, flush=True)
                 continue
-        
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((json['circuit'][0]["address"], int(json['circuit'][0]["port"])))
+
+    msg = f"data,{json['id']},{url},END" 
+    sock.sendall(msg.encode())
     
 if __name__ == "__main__":
     main()
