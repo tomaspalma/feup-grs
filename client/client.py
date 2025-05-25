@@ -23,13 +23,10 @@ load_dotenv()
 client_private_key = ec.generate_private_key(ec.SECP256R1())
 client_public_key = client_private_key.public_key()
 
-def encrypt_layer(msg: bytes, key):
-    print("KEY: ", key, flush=True)
+def encrypt_layer(msg: bytes, key, decrypt=False):
     onion_encoded_key = load_pem_public_key(key.encode('utf-8'))
 
     shared_secret = client_private_key.exchange(ec.ECDH(), onion_encoded_key)
-
-    print("CLIENT SHARED SECRET: ", shared_secret, flush=True)
 
     # Derive AES key using HKDF
     aes_key = HKDF(
@@ -39,12 +36,13 @@ def encrypt_layer(msg: bytes, key):
         info=b""
     ).derive(shared_secret)
 
-    print("CLIENT AES KEY: ", aes_key, flush=True)
-
     cipher = Cipher(algorithms.AES(aes_key), modes.CTR(b"\x8f\x07@nq}F\x1e\x1cv\x95\x13,\xb3\xef\xe9"), backend=default_backend())
-    encryptor = cipher.encryptor()
-
-    return encryptor.update(msg) + encryptor.finalize()
+    if decrypt:
+        decryptor = cipher.decryptor()
+        return decryptor.update(msg) + decryptor.finalize()
+    else:
+        encryptor = cipher.encryptor()
+        return encryptor.update(msg) + encryptor.finalize()
     
 def main():
     parser = argparse.ArgumentParser(description="GRS Onion Client")
@@ -61,33 +59,67 @@ def main():
     for key in json['keys']:
         url = encrypt_layer(url, key)
 
-    print("CIRCUIT: ", json["circuit"], flush=True)
     # 2. Send client public key
-    for i, node in enumerate(json['circuit']):
+    for node in json['circuit']:
         while True:
             print("Sending to ", node, flush=True)
+            public_pem = client_public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
             try: 
-                public_pem = client_public_key.public_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PublicFormat.SubjectPublicKeyInfo
-                )
-
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.connect((node["address"], int(node["port"])))
 
                 msg = f"client_pkey,{json['id']},{public_pem.decode()},END" 
                 sock.sendall(msg.encode())
-
                 break
             except Exception as e:
                 print("Error: ", e, flush=True)
                 continue
+            finally:
+                sock.close()
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((json['circuit'][0]["address"], int(json['circuit'][0]["port"])))
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((json['circuit'][0]["address"], int(json['circuit'][0]["port"])))
 
-    msg = f"data,{json['id']},{base64.b64encode(url).decode()},END" 
-    sock.sendall(msg.encode())
+        msg = f"data,{json['id']},{base64.b64encode(url).decode()},END" 
+        sock.sendall(msg.encode())
+    except Exception as e:
+        print("Error sending data: ", e, flush=True)
+        return
+    finally:
+        sock.close()
+    
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(('0.0.0.0', 9000))
+        sock.listen()
+
+        conn, _ = sock.accept()
+
+        data = b""
+        while b",END" not in data:
+            chunk = conn.recv(1024)
+            if not chunk:
+                break
+            data += chunk
+        
+        message = data.decode()
+        message = message.split(",")[2].encode()
+        message = base64.b64decode(message)
+
+        for key in json['keys'][::-1]:
+            message = encrypt_layer(message, key, decrypt=True)
+
+        print("Response: ", message, flush=True)
+
+    except Exception as e:
+        print("Error: ", e, flush=True)
+    finally:
+        sock.close()
+
     
 if __name__ == "__main__":
     main()

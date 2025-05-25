@@ -100,15 +100,16 @@ def circuit():
         sock = selected_nodes[i][1]
 
         right = "None" if i == len(selected_nodes)-1 else selected_nodes[i+1][0].address
-        left = "None" if i == 0 else selected_nodes[i-1][0].address
+        left = request.remote_addr if i == 0 else selected_nodes[i-1][0].address
     
         message = f"controller_setup,{circuit_id},{left},{right},END".encode()
         try:
-            print("SENDING: ", message, flush=True)
             sock.sendall(message)
         except Exception as e:
             print("Error sending message: ", e, flush=True)
             continue
+        finally:
+            sock.close()
     
         print("Message sent: ", message, flush=True)
 

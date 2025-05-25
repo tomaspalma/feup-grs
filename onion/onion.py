@@ -43,15 +43,10 @@ def generate_keypair():
 (public_pem, private_pem, public_key, private_key) = generate_keypair()
 
 def handle_new_circuit(circuit_id, left, right):
-    print("RIGHT: ", right, flush=True)
-    print("LEFT: ", left, flush=True)
-
     circuits[circuit_id] = {
         "left": left,
         "right": right
     }
-
-    print("CIRCUITS: ", circuits, flush=True)
 
 def handle_client_pkey(circuit_id, public_key):
     client_public_key = load_pem_public_key(public_key.encode())
@@ -61,16 +56,12 @@ def handle_client_pkey(circuit_id, public_key):
         client_public_key
     )
 
-    print("ONION SHARED SECRET: ", shared_secret, flush=True)
-
     key = HKDF(
         algorithm=hashes.SHA256(),
         length=32,  # AES-256 key length
         salt=None,  # Optional salt
         info=b""
     ).derive(shared_secret)
-
-    print("SHARED KEY: ", key, flush=True)
 
     if circuits.get(circuit_id):
         circuits[circuit_id]["secret"] = key
@@ -80,7 +71,7 @@ def handle_client_pkey(circuit_id, public_key):
 def handle_data(circuit_id, data):
     if circuits.get(circuit_id):
         data = base64.b64decode(data)
-        print("HANDLING DATA BEFORE DECRYPT: ", data, flush=True)
+
         key = circuits[circuit_id]["secret"]
 
         # 1. Decrypt data
@@ -89,19 +80,42 @@ def handle_data(circuit_id, data):
 
         data = decryptor.update(data) + decryptor.finalize()
 
-        print("HANDLING DATA AFTER DECRYPT: ", data, flush=True)
-
-        # 2. Send it to node on the right
+        # 2. Send it to the next node
         if circuits[circuit_id]["right"] != "None":
-            print("NÃO DEVIA TER VINDO PARA AQUI?")
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((circuits[circuit_id]["right"], 9000))
-
-            print("SENDING TO RIGHT NODE: ", data, flush=True)
-
-            sock.sendall(f"data,{circuit_id},{base64.b64encode(data).decode()}".encode())
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((circuits[circuit_id]["right"], 9000))
+                sock.sendall(f"data,{circuit_id},{base64.b64encode(data).decode()},END".encode())
+            except Exception as e:
+                print(f"Error forwarding data to next node: {e}", flush=True)
+            finally:
+                sock.close()
         else:
             res = requests.get(data)
+
+            handle_response(circuit_id, base64.b64encode(res.content).decode())
+
+def handle_response(circuit_id, data):
+    if circuits.get(circuit_id):
+        data = base64.b64decode(data)
+
+        key = circuits[circuit_id]["secret"]
+
+        # 1. Encrypt data
+        cipher = Cipher(algorithms.AES(key), modes.CTR(b"\x8f\x07@nq}F\x1e\x1cv\x95\x13,\xb3\xef\xe9"), backend=default_backend())
+        encryptor = cipher.encryptor()
+
+        data = encryptor.update(data) + encryptor.finalize()
+
+        # 2. Send it to the previous node
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((circuits[circuit_id]["left"], 9000))
+            sock.sendall(f"rdata,{circuit_id},{base64.b64encode(data).decode()},END".encode())
+        except Exception as e:
+            print(f"Error sending response to previous node: {e}", flush=True)
+        finally:
+            sock.close()
 
 # 1. Make request to controller
 while True:
@@ -121,13 +135,17 @@ while True:
 
 def handle_connection(conn):
     with conn:
+        buffer = b""
         while True:
-            data = conn.recv(1024)
+            while b",END" not in buffer:
+                chunk = conn.recv(1024)
+                if not chunk:
+                    return
+                buffer += chunk
 
-            msg = data.decode()
+            msg, buffer = buffer.split(b",END", 1)
+            msg = msg.decode()
             if msg != "":
-                print("RECEIVED: ", msg, flush=True)
-
                 if msg.startswith("client_pkey"):
                     circuit_id = msg.split(",")[1]
                     public_key = msg.split(",")[2]
@@ -141,8 +159,14 @@ def handle_connection(conn):
                     handle_new_circuit(circuit_id, left, right)
                 elif msg.startswith("data"):
                     circuit_id = msg.split(",")[1]
-                    data = msg.split(",")[2]                    
+                    data = msg.split(",")[2]
+
                     handle_data(circuit_id, data)
+                elif msg.startswith("rdata"):
+                    circuit_id = msg.split(",")[1]
+                    data = msg.split(",")[2]
+
+                    handle_response(circuit_id, data)
 
 # 2. Listen for requests
 try:
