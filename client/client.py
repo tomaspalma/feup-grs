@@ -44,7 +44,7 @@ def encrypt_layer(msg: bytes, key):
     cipher = Cipher(algorithms.AES(aes_key), modes.CTR(b"\x8f\x07@nq}F\x1e\x1cv\x95\x13,\xb3\xef\xe9"), backend=default_backend())
     encryptor = cipher.encryptor()
 
-    return base64.b64encode(encryptor.update(msg) + encryptor.finalize())
+    return encryptor.update(msg) + encryptor.finalize()
     
 def main():
     parser = argparse.ArgumentParser(description="GRS Onion Client")
@@ -86,7 +86,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((json['circuit'][0]["address"], int(json['circuit'][0]["port"])))
 
-    msg = f"data,{json['id']},{url.decode()},END" 
+    msg = f"data,{json['id']},{base64.b64encode(url).decode()},END" 
     sock.sendall(msg.encode())
     
 if __name__ == "__main__":
