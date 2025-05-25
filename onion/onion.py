@@ -16,6 +16,7 @@ import requests
 import os
 import socket
 import threading
+import base64
 
 load_dotenv()
 
@@ -78,6 +79,7 @@ def handle_client_pkey(circuit_id, public_key):
 
 def handle_data(circuit_id, data):
     if circuits.get(circuit_id):
+        data = base64.b64decode(data)
         print("HANDLING DATA BEFORE DECRYPT: ", data, flush=True)
         key = circuits[circuit_id]["secret"]
 
@@ -85,7 +87,7 @@ def handle_data(circuit_id, data):
         cipher = Cipher(algorithms.AES(key), modes.CTR(b"\x8f\x07@nq}F\x1e\x1cv\x95\x13,\xb3\xef\xe9"), backend=default_backend())
         decryptor = cipher.decryptor()
 
-        data = decryptor.update(data.encode()) + decryptor.finalize()
+        data = decryptor.update(data) + decryptor.finalize()
 
         print("HANDLING DATA AFTER DECRYPT: ", data, flush=True)
 
@@ -95,7 +97,9 @@ def handle_data(circuit_id, data):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((circuits[circuit_id]["right"], 9000))
 
-            sock.sendall(data)
+            print("SENDING TO RIGHT NODE: ", data, flush=True)
+
+            sock.sendall(f"data,{circuit_id},{base64.b64encode(data).decode()}".encode())
         else:
             res = requests.get(data)
 
