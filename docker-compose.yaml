@@ -8,7 +8,7 @@ services:
       - postgres
     networks:
       onion_net:
-        ipv4_address: 10.0.2.254
+        ipv4_address: 10.0.1.254
     volumes:
       - ./controller:/controller
     
@@ -24,7 +24,7 @@ services:
       - "9090:9090"
     networks:
       onion_net:
-        ipv4_address: 10.0.2.253
+        ipv4_address: 10.0.1.253
   
   grafana:
     image: grafana/grafana
@@ -36,7 +36,7 @@ services:
       - prometheus
     networks:
       onion_net:
-        ipv4_address: 10.0.2.252
+        ipv4_address: 10.0.1.252
   
   postgres:
     image: postgres:17
@@ -50,6 +50,7 @@ services:
       - ./database:/docker-entrypoint-initdb.d
     networks:
       onion_net:
+        ipv4_address: 10.0.1.251
 
   pgadmin:
     build: ./pgadmin
@@ -62,27 +63,13 @@ services:
       - "8080:80"
     networks:
       onion_net:
-
-  # Connection between the client and onion networks
-  client:
-    build: ./client
-    depends_on:
-      - controller
-    networks:
-      client_net:
-        ipv4_address: 10.0.1.254
-      onion_net:
-    volumes:
-      - ./client:/client
+        ipv4_address: 10.0.1.250
 
   clients:
     build: ./client
-    depends_on:
-      - client
     deploy:
       replicas: 2
     networks:
-      client_net:
       onion_net:
     volumes:
       - ./client:/client
@@ -105,15 +92,10 @@ services:
       - ./onion/onion.py:/onion/onion.py
 
 networks:
-  client_net:
-    ipam:
-      config:
-        - subnet: 10.0.1.0/24
-
   onion_net:
     ipam:
       config:
-        - subnet: 10.0.2.0/24
+        - subnet: 10.0.1.0/24
 
 volumes:
   grafana-data:
