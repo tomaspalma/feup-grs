@@ -61,10 +61,22 @@ def handle_client_pkey(circuit_id, public_key):
 
     if circuits.get(circuit_id):
         circuits[circuit_id]["secret"] = key
+
+        if circuits[circuit_id]["right"] != "None":
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((circuits[circuit_id]["right"], 9000))
+                circuits[circuit_id]["right"] = sock
+
+                msg = f"client_pkey,{circuit_id},{public_key},END"
+                sock.sendall(msg.encode())
+            except Exception as e:
+                print(f"Error forwarding client public key to next node: {e}", flush=True)
+                sock.close()
     else:
         print("No circuit found for ", circuit_id, flush=True)
 
-def handle_data(circuit_id, data, conn):
+def handle_data(circuit_id, data):
     if circuits.get(circuit_id):
         data = base64.b64decode(data)
         key = circuits[circuit_id]["secret"]
@@ -77,8 +89,7 @@ def handle_data(circuit_id, data, conn):
         # 2. Send it to the next node or handle locally
         if circuits[circuit_id]["right"] != "None":
             try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.connect((circuits[circuit_id]["right"], 9000))
+                sock = circuits[circuit_id]["right"]
                 sock.sendall(f"data,{circuit_id},{base64.b64encode(data).decode()},END".encode())
                 
                 buffer = b""
@@ -91,7 +102,7 @@ def handle_data(circuit_id, data, conn):
                 msg, _ = buffer.split(b",END", 1)
                 msg = msg.decode()
                 _, _, data = msg.split(",", 2)
-                handle_response(circuit_id, data, conn)
+                handle_response(circuit_id, data)
 
             except Exception as e:
                 print(f"Error forwarding data to next node: {e}", flush=True)
@@ -101,11 +112,11 @@ def handle_data(circuit_id, data, conn):
             try:
                 res = requests.get(data)
                 
-                handle_response(circuit_id, base64.b64encode(res.content).decode(), conn)
+                handle_response(circuit_id, base64.b64encode(res.content).decode())
             except Exception as e:
                 print(f"Error making final request: {e}", flush=True)
 
-def handle_response(circuit_id, data, conn):
+def handle_response(circuit_id, data):
     if circuits.get(circuit_id):
         data = base64.b64decode(data)
         key = circuits[circuit_id]["secret"]
@@ -117,7 +128,7 @@ def handle_response(circuit_id, data, conn):
 
         # 2. Send it to the previous node using the same socket if possible
         try:
-            conn.sendall(f"data,{circuit_id},{base64.b64encode(data).decode()},END".encode())
+            circuits[circuit_id]["left"].sendall(f"data,{circuit_id},{base64.b64encode(data).decode()},END".encode())
         except Exception as e:
             print(f"Error sending response to previous node: {e}", flush=True)
 
@@ -162,7 +173,9 @@ def handle_connection(conn):
                 elif msg.startswith("data"):
                     circuit_id = msg.split(",")[1]
                     data = msg.split(",")[2]
-                    handle_data(circuit_id, data, conn)
+                    if circuits.get(circuit_id):
+                        circuits[circuit_id]["left"] = conn
+                    handle_data(circuit_id, data)
 
 # 2. Listen for requests
 try:

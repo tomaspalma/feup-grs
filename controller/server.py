@@ -87,6 +87,7 @@ def circuit():
 
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
             sock.connect((candidate.address, int(candidate.port)))
         except Exception as e:
             print(f"Error connecting to {candidate.address}:{candidate.port} - {e}", flush=True)

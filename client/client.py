@@ -55,31 +55,21 @@ def main():
         url = encrypt_layer(url, key)
 
     # 2. Send client public key
-    for node in json['circuit']:
-        while True:
-            print("Sending to ", node, flush=True)
-            public_pem = client_public_key.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            )
-            try: 
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.connect((node["address"], int(node["port"])))
-
-                msg = f"client_pkey,{json['id']},{public_pem.decode()},END" 
-                sock.sendall(msg.encode())
-                break
-            except Exception as e:
-                print("Error: ", e, flush=True)
-                continue
-            finally:
-                sock.close()
-
+    public_pem = client_public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((json['circuit'][0]["address"], int(json['circuit'][0]["port"])))
+        sock.settimeout(5)
+        sock.connect((json["circuit"][0]["address"], int(json["circuit"][0]["port"])))
 
-        msg = f"data,{json['id']},{base64.b64encode(url).decode()},END" 
+        # Send client public key
+        msg = f"client_pkey,{json['id']},{public_pem.decode()},END"
+        sock.sendall(msg.encode())
+
+        # Send encrypted URL data
+        msg = f"data,{json['id']},{base64.b64encode(url).decode()},END"
         sock.sendall(msg.encode())
 
         # Wait for the response on the same socket
@@ -100,7 +90,7 @@ def main():
         print("Response: ", message, flush=True)
 
     except Exception as e:
-        print("Error sending data or receiving response: ", e, flush=True)
+        print("Error: ", e, flush=True)
         return
     finally:
         sock.close()
