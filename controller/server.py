@@ -73,8 +73,8 @@ def circuit():
         identities = list(filter(lambda x: x.address in up_nodes, identities))
 
         # Sort nodes by network traffic
-        metric = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'node_network_receive_bytes_total[1m]'}).json()
-        metric = {node['metric']['instance'].split(':')[0]: float(node['values'][0][1]) for node in metric['data']['result']}
+        metric = requests.get(os.getenv('PROMETHEUS_URL'), params={'query': 'rate(node_network_transmit_bytes_total{device="eth0"}[5m])'}).json()
+        metric = {node['metric']['instance'].split(':')[0]: float(node['value'][1]) for node in metric['data']['result']} 
         identities.sort(key=lambda x: metric.get(x.address, 0))
 
     selected_nodes = []
